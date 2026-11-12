@@ -1,0 +1,283 @@
+### 1. Health Check
+GET http://127.0.0.1:8000/
+Accept: application/json
+
+### 2. Приветственный тест
+GET http://127.0.0.1:8000/hello/Developer
+Accept: application/json
+
+
+# ==========================================
+# 🔑 АВТОРИЗАЦИЯ И РЕГИСТРАЦИЯ ПОЛЬЗОВАТЕЛЕЙ
+# ==========================================
+
+### 3. Регистрация НОВОГО пользователя
+POST http://127.0.0.1:8000/api/v1/auth/register
+Content-Type: application/json
+
+{
+  "email": "drone_pilot_2026@example.com",
+  "password": "!1StringPassword",
+  "phone_number": "+79998887766",
+  "full_name": "Пилотов Алексей Сергеевич"
+}
+
+### 4. Запрос OTP-кода (повторная отправка при необходимости)
+POST http://127.0.0.1:8000/api/v1/auth/request-otp
+Content-Type: application/json
+
+{
+  "email": "drone_pilot_2026@example.com"
+}
+
+### 5. Подтверждение OTP-кода и автоматический вход (получение токена)
+# Замени 123456 на код из консоли приложения или из Mailpit (http://127.0.0.1:8025)
+POST http://127.0.0.1:8000/api/v1/auth/verify-registration
+Content-Type: application/json
+
+{
+  "email": "drone_pilot_2026@example.com",
+  "otp_code": "499306"
+}
+
+### 6. Вход обычного пользователя (Login)
+POST http://127.0.0.1:8000/api/v1/auth/login
+Content-Type: application/x-www-form-urlencoded
+
+username=drone_pilot_2026%40example.com&password=%211StringPassword
+
+> {% client.global.set("user_token", response.body.access_token); %}
+
+### 7. Вход АДМИНИСТРАТОРА (Вход под админской учеткой)
+POST http://127.0.0.1:8000/api/v1/auth/login
+Content-Type: application/x-www-form-urlencoded
+
+username=admin%40dronfactory.ru&password=%211StringPassword
+
+> {% client.global.set("admin_token", response.body.access_token); %}
+
+### 8. Профиль текущего пользователя (Auth /me)
+GET http://127.0.0.1:8000/api/v1/auth/me
+Authorization: Bearer {{user_token}}
+Accept: application/json
+
+
+# ==========================================
+# 👥 ПОЛЬЗОВАТЕЛИ И АДРЕСА ДОСТАВКИ (USERS)
+# ==========================================
+
+### 9. Получить список всех пользователей (Только ADMIN)
+GET http://127.0.0.1:8000/api/v1/users?limit=20
+Authorization: Bearer {{admin_token}}
+Accept: application/json
+
+### 10. Просмотр конкретного пользователя по ID
+GET http://127.0.0.1:8000/api/v1/users/1
+Authorization: Bearer {{admin_token}}
+Accept: application/json
+
+### 11. Обновление собственного профиля (Свой ID)
+PUT http://127.0.0.1:8000/api/v1/users/2
+Authorization: Bearer {{user_token}}
+Content-Type: application/json
+
+{
+  "full_name": "Пилотов Алексей Сергеевич (Обновлен)",
+  "language": "ru",
+  "theme_mode": "dark"
+}
+
+### 12. Получить список адресов доставки текущего пользователя
+GET http://127.0.0.1:8000/api/v1/user-addresses
+Authorization: Bearer {{user_token}}
+Accept: application/json
+
+### 13. Добавить новый адрес доставки
+POST http://127.0.0.1:8000/api/v1/user-addresses
+Authorization: Bearer {{user_token}}
+Content-Type: application/json
+
+{
+  "title": "Дом",
+  "city": "Москва",
+  "address_line": "ул. Авиаторов, д. 15, кв. 42",
+  "comment": "Позвонить за 30 минут",
+  "is_default": true
+}
+
+
+###==========================================
+### 🛸 КАТАЛОГ И КАТЕГОРИИ (CATALOG)
+### ==========================================
+
+### 14. Список всех категорий (Публично)
+GET http://127.0.0.1:8000/api/v1/categories
+Accept: application/json
+
+### 15. Создание категории дронов (Manager / Admin)
+POST http://127.0.0.1:8000/api/v1/categories
+Authorization: Bearer {{admin_token}}
+Content-Type: application/json
+
+{
+  "name": {
+    "ru": "Промышленные дроны",
+    "en": "Industrial Drones"
+  },
+  "description": {
+    "ru": "Дроны для мониторинга и агросферы",
+    "en": "Heavy-duty drones for inspection and agriculture"
+  }
+}
+
+### 16. Получить каталог дронов (Публично)
+GET http://127.0.0.1:8000/api/v1/drones
+Accept: application/json
+
+
+# ==========================================
+# 🛠️ НОМЕНКЛАТУРА И СКЛАД (MATERIALS & WAREHOUSES)
+# ==========================================
+
+### 17. Получить список материалов/комплектующих (Склад)
+GET http://127.0.0.1:8000/api/v1/materials
+Authorization: Bearer {{admin_token}}
+Accept: application/json
+
+### 18. Создать материал (Карбоновая рама)
+POST http://127.0.0.1:8000/api/v1/materials
+Authorization: Bearer {{admin_token}}
+Content-Type: application/json
+
+{
+  "sku": "MAT-FRAME-7INCH",
+  "name": {
+    "ru": "Карбоновая рама 7 дюймов",
+    "en": "Carbon Frame 7 inch"
+  },
+  "unit": "шт",
+  "description": {
+    "ru": "Усиленная рама для дальнолетов",
+    "en": "Reinforced frame for long-range drones"
+  }
+}
+
+### 19. Получить список всех складов
+GET http://127.0.0.1:8000/api/v1/warehouses
+Authorization: Bearer {{admin_token}}
+Accept: application/json
+
+### 20. Создать новый склад/сборочную площадку
+POST http://127.0.0.1:8000/api/v1/warehouses
+Authorization: Bearer {{admin_token}}
+Content-Type: application/json
+
+{
+  "name": {
+    "ru": "Центральный склад запчастей №1",
+    "en": "Central Parts Warehouse #1"
+  },
+  "address": "г. Москва, Заводское шоссе, д. 4",
+  "is_assembly_site": true
+}
+
+### 21. Создать документ прихода материалов (Draft)
+POST http://127.0.0.1:8000/api/v1/warehouse-documents
+Authorization: Bearer {{admin_token}}
+Content-Type: application/json
+
+{
+  "warehouse_id": 1,
+  "doc_type": "incoming",
+  "reason": "Поступление комплектующих от завода-изготовителя",
+  "material_items": [
+    {
+      "material_id": 1,
+      "quantity": 50.0
+    }
+  ]
+}
+
+### 22. Проведение складского документа (Обновление фактических остатков)
+PATCH http://127.0.0.1:8000/api/v1/warehouse-documents/1/status
+Authorization: Bearer {{admin_token}}
+Content-Type: application/json
+
+{
+  "status": "completed"
+}
+
+
+###==========================================
+# 📦 ЗАКАЗЫ И ПРОВЕРКА ВЫПОЛНИМОСТИ (ORDERS)
+# ==========================================
+
+### 23. Оформление заказа клиентом
+POST http://127.0.0.1:8000/api/v1/orders
+Authorization: Bearer {{user_token}}
+Content-Type: application/json
+
+{
+  "customer_name": "Пилотов Алексей Сергеевич",
+  "customer_contact": "+79998887766",
+  "delivery_type": "delivery",
+  "delivery_address": "г. Москва, ул. Авиаторов, д. 15, кв. 42",
+  "payment_method": "card",
+  "items": [
+    {
+      "variant_id": 1,
+      "quantity": 2
+    }
+  ]
+}
+
+### 24. Проверка выполнимости заказа по готовой продукции и BOM (Manager/Admin)
+GET http://127.0.0.1:8000/api/v1/orders/1/feasibility
+Authorization: Bearer {{admin_token}}
+Accept: application/json
+
+### 25. Обновление статуса заказа (В производство)
+PATCH http://127.0.0.1:8000/api/v1/orders/1/status
+Authorization: Bearer {{admin_token}}
+Content-Type: application/json
+
+{
+  "status": "production"
+}
+
+### 26. Выставить счет / сформировать чек к заказу
+POST http://127.0.0.1:8000/api/v1/invoices
+Authorization: Bearer {{user_token}}
+Content-Type: application/json
+
+{
+  "order_id": 1,
+  "amount": 150000.00,
+  "payment_method": "card",
+  "payment_details": "Оплата банковской картой онлайн"
+}
+
+### 27. Просмотр чека по ID
+GET http://127.0.0.1:8000/api/v1/invoices/1
+Authorization: Bearer {{user_token}}
+Accept: application/json
+
+
+# ==========================================
+# 🛡️ АУДИТ И СИСТЕМНЫЕ РОЛИ (ADMIN ONLY)
+# ==========================================
+
+### 28. Просмотр системных ролей
+GET http://127.0.0.1:8000/api/v1/roles
+Authorization: Bearer {{admin_token}}
+Accept: application/json
+
+### 29. Просмотр системного журнала аудита (Audit Logs)
+GET http://127.0.0.1:8000/api/v1/audit-logs?limit=20
+Authorization: Bearer {{admin_token}}
+Accept: application/json
+
+### 30. Фильтрация аудит-лога по событиям авторизации
+GET http://127.0.0.1:8000/api/v1/audit-logs?category=AUTH
+Authorization: Bearer {{admin_token}}
+Accept: application/json
