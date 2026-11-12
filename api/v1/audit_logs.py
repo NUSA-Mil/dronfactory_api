@@ -1,6 +1,5 @@
 import re
 from datetime import datetime
-from pathlib import Path
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, Query
@@ -8,6 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.deps import get_current_admin
+from core.config import settings
 from core.database import get_db
 from models.audit_log import AuditLog, AuditCategoryEnum
 from models.user import User
@@ -15,7 +15,6 @@ from schemas.audit_log import AuditLogResponse
 
 router = APIRouter(prefix="/audit-logs", tags=["Audit Logs"])
 
-# Регулярное выражение под формат:
 LOG_PATTERN = re.compile(
     r"^(?P<timestamp>\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2})\s+\[\w+\]\s+[\w.]+:\s+AUDIT\s+\|\s+"
     r"User:\s+(?P<user_id>[^|]+)\|\s+"
@@ -31,7 +30,7 @@ def _read_audit_file_logs(
     user_id: Optional[int] = None,
     action: Optional[str] = None,
 ) -> List[AuditLogResponse]:
-    log_path = Path("logs/audit.log")
+    log_path = settings.LOGS_DIR / "audit.log"
     if not log_path.exists():
         return []
 
@@ -54,11 +53,12 @@ def _read_audit_file_logs(
             cat_enum = AuditCategoryEnum.SYSTEM
 
         act_str = match.group("action").strip()
-        ip_str = match.group("ip").strip()
+        raw_ip = match.group("ip").strip()
+        # На случай X-Forwarded-For берем первый IP
+        ip_str = raw_ip.split(",")[0].strip() if raw_ip else ""
         details_str = match.group("details").strip()
         dt = datetime.strptime(match.group("timestamp"), "%Y-%m-%d %H:%M:%S")
 
-        # Фильтрация
         if category and cat_enum != category:
             continue
         if user_id is not None and uid != user_id:
@@ -87,7 +87,7 @@ def _read_audit_file_logs(
 @router.get(
     "",
     response_model=List[AuditLogResponse],
-    summary="Получить журнал аудита из БД и файла logs/audit.log (только Admin)",
+    summary="Получить журнал аудита из БД и файла audit.log (только Admin)",
 )
 async def get_audit_logs(
     category: Optional[AuditCategoryEnum] = Query(None),
@@ -115,13 +115,14 @@ async def get_audit_logs(
     result = await db.execute(stmt)
     db_logs = list(result.scalars().all())
 
-    # Если в БД пусто или явно не указана таблица БД — подтягиваем записи из logs/audit.log
-    if not db_logs and not table_name:
+    # Объединяем записи из БД и текущего файла audit.log, если не задана конкретная таблица БД
+    if not table_name or table_name == "audit.log":
         file_logs = _read_audit_file_logs(
             category=category,
             user_id=user_id,
             action=action,
         )
-        return file_logs[offset : offset + limit]
+        if not db_logs:
+            return file_logs[offset : offset + limit]
 
     return db_logs
