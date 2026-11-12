@@ -25,7 +25,7 @@ async def lifespan(app: FastAPI):
     yield
 
     app_logger.info("Остановка приложения DronFactory API...")
-    await redis_client.close()
+    await redis_client.aclose()
 
 
 app = FastAPI(
