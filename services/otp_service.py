@@ -1,14 +1,21 @@
+import os
 import random
 import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
-from typing import Optional
+
+import requests
 
 from core.config import settings
 from core.logger import app_logger
 from core.rate_limit import redis_client
 
 OTP_EXPIRE_SECONDS = 300  # 5 минут
+
+DEFAULT_GAS_WEBHOOK_URL = (
+    "https://script.google.com/macros/s/"
+    "AKfycbxNaxZIOlh4bvOTfw9Ub6OP1Gl8xcvj3fpVHsBBYKkhxO7TKF9rKOZrQrYRt8jBA_Y/exec"
+)
 
 
 class OTPService:
@@ -20,13 +27,11 @@ class OTPService:
         code = self.generate_code()
         redis_key = f"otp:{email}"
 
-        # Сохраняем OTP в Redis на 5 минут
+        # Сохраняем OTP в Upstash Redis на 5 минут
         await redis_client.setex(redis_key, OTP_EXPIRE_SECONDS, code)
 
-        # Выводим OTP в консоль разработчика для отладки
         app_logger.info(f"=== [OTP GENERATED] === Email: {email} | Code: {code}")
 
-        # Отправляем письмо в Mailpit
         await self.send_otp_email(email, code)
         return code
 
@@ -43,11 +48,7 @@ class OTPService:
         return False
 
     async def send_otp_email(self, to_email: str, code: str) -> None:
-        msg = MIMEMultipart()
-        msg["From"] = f"{settings.EMAILS_FROM_NAME} <{settings.EMAILS_FROM_EMAIL}>"
-        msg["To"] = to_email
-        msg["Subject"] = "Код подтверждения регистрации — DronFactory"
-
+        subject = "Код подтверждения регистрации — DronFactory"
         html_content = f"""
         <html>
             <body style="font-family: Arial, sans-serif; background-color: #1a1a1a; color: #ffffff; padding: 20px;">
@@ -62,10 +63,37 @@ class OTPService:
             </body>
         </html>
         """
+
+        gas_url = os.getenv("GAS_MAIL_WEBHOOK_URL", DEFAULT_GAS_WEBHOOK_URL)
+
+        # Отправка через личный Google Apps Script Webhook (в продакшене на Render)
+        if gas_url and settings.ENVIRONMENT == "production":
+            try:
+                response = requests.post(
+                    gas_url,
+                    json={
+                        "to": to_email,
+                        "subject": subject,
+                        "html": html_content,
+                    },
+                    timeout=10,
+                )
+                if response.status_code == 200:
+                    app_logger.info(f"OTP письмо успешно отправлено через Google Webhook на {to_email}")
+                else:
+                    app_logger.error(f"Ошибка Google Webhook ({response.status_code}): {response.text}")
+            except Exception as e:
+                app_logger.error(f"Ошибка соединения с Google Webhook: {e}")
+            return
+
+        # Локальный фолбэк на Mailpit при запуске на ПК (development)
+        msg = MIMEMultipart()
+        msg["From"] = f"{settings.EMAILS_FROM_NAME} <{settings.EMAILS_FROM_EMAIL}>"
+        msg["To"] = to_email
+        msg["Subject"] = subject
         msg.attach(MIMEText(html_content, "html", "utf-8"))
 
         try:
-            # Прямая синхронная отправка на 127.0.0.1:1025 для гарантированной доставки под Windows
             with smtplib.SMTP(host=settings.SMTP_HOST, port=settings.SMTP_PORT, timeout=5) as server:
                 server.send_message(msg)
             app_logger.info(f"Письмо с OTP успешно доставлено в Mailpit для {to_email}")
